@@ -54,6 +54,9 @@ func NewRouter(ctx context.Context, cfg *config.Config, db *database.DB, rdb *re
 
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Recovery(log))
+	// Browser hardening headers on every response, including the embedded
+	// SPA and API errors. Set here rather than relying on the reverse proxy.
+	r.Use(middleware.SecurityHeaders(cfg.ContentSecurityPolicy))
 	if poolCache != nil {
 		r.Use(hostctx.Middleware(ctxRegistry, poolCache, redisCache, db, rdb, cfg.RegistryReloadSecret))
 	} else {
