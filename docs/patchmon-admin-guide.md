@@ -1510,7 +1510,7 @@ The agent chooses the patching back-end by detecting the host's package manager.
 When the agent detects it is running on Windows, patch runs are handled by the WUA + WinGet path rather than the Linux package-manager path:
 
 - **Patch all** installs every Windows Update currently marked `approved` for that host by the server, plus runs `winget upgrade --all` for WinGet-managed applications.
-- **Patch package** routes by name: strings that look like a `KB...` / GUID update are sent via WUA, anything else is treated as a WinGet package ID.
+- **Patch package** routes by name. Before dispatch the server resolves any name that matches one of the host's known Windows Updates, by title or by KB number, to that update's WUA GUID, so selecting an update from the Packages page or typing `KB5063878` both work. The agent then sends GUIDs to WUA and treats anything else as a WinGet package ID.
 - Reboot state, superseded-update cleanup, and approved-GUID sync all go through dedicated `/patching/windows-updates/*` endpoints used by the beta Windows agent.
 
 Windows patching is flagged **beta** in 2.0 and the Run Detail page renders the same way regardless of OS. The terminal pane simply shows PowerShell / `winget` output instead of `apt-get` output.

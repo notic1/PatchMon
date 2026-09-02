@@ -39,6 +39,17 @@ import (
 func NewRouter(ctx context.Context, cfg *config.Config, db *database.DB, rdb *redisclient.Client, registry *agentregistry.Registry, queueClient *asynq.Client, queueInspector *asynq.Inspector, ctxRegistry *hostctx.Registry, poolCache *hostctx.PoolCache, redisCache *hostctx.RedisCache, notifyEmit *notifications.Emitter, log *slog.Logger, frontendFS fs.FS) (http.Handler, *guacd.Process) {
 	r := chi.NewRouter()
 
+	// Self-hosted feature allow-list. Multi-context deployments ignore it: the
+	// registry entry on each request carries its own module list.
+	if unknown := hostctx.SetSingleContextModules(cfg.EnabledModules); len(unknown) > 0 && log != nil {
+		log.Warn("ignoring unknown ENABLED_MODULES entries",
+			"entries", strings.Join(unknown, ", "),
+			"known", strings.Join(hostctx.KnownModules, ", "))
+	}
+	if len(cfg.EnabledModules) > 0 && log != nil {
+		log.Info("feature modules restricted by ENABLED_MODULES", "modules", hostctx.SingleContextModulesString())
+	}
+
 	var dbProvider database.DBProvider
 	if poolCache != nil {
 		dbProvider = &hostctx.DBResolver{Default: db}
@@ -54,6 +65,9 @@ func NewRouter(ctx context.Context, cfg *config.Config, db *database.DB, rdb *re
 
 	r.Use(middleware.RequestID())
 	r.Use(middleware.Recovery(log))
+	// Browser hardening headers on every response, including the embedded
+	// SPA and API errors. Set here rather than relying on the reverse proxy.
+	r.Use(middleware.SecurityHeaders(cfg.ContentSecurityPolicy))
 	if poolCache != nil {
 		r.Use(hostctx.Middleware(ctxRegistry, poolCache, redisCache, db, rdb, cfg.RegistryReloadSecret))
 	} else {

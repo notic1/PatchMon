@@ -1042,13 +1042,14 @@ func (h *AuthHandler) MeContext(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve the multi-context entry (if any). Nil entry = single-context mode.
+	// Resolve the multi-context entry (if any). Nil entry = single-context mode,
+	// where the allow-list comes from ENABLED_MODULES ("*" when unset).
 	entry := hostctx.EntryFromContext(r.Context())
 	tenant := map[string]interface{}{
 		"multi_context": entry != nil,
 		"host":          "",
 		"slug":          "",
-		"modules":       "*", // default: single-context mode allows everything
+		"modules":       hostctx.SingleContextModulesString(),
 	}
 	if entry != nil {
 		tenant["host"] = entry.Host

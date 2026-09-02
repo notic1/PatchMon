@@ -98,10 +98,21 @@ type Config struct {
 	// Server
 	EnableHSTS bool
 	TrustProxy bool
+	// ContentSecurityPolicy is the Content-Security-Policy header value sent
+	// with every non-Swagger response. Empty means no CSP header. Resolved
+	// from CONTENT_SECURITY_POLICY: unset = DefaultContentSecurityPolicy,
+	// "off" = empty, anything else = used verbatim.
+	ContentSecurityPolicy string
 	// TrustedProxyRanges lists CIDRs (or bare IPs) of reverse proxies in front of
 	// PatchMon. Env-only: exposing this in the settings UI would let an admin
 	// widen it to 0.0.0.0/0 and restore X-Forwarded-For spoofing.
 	TrustedProxyRanges []string
+	// EnabledModules restricts which feature modules a self-hosted (single
+	// context) install exposes, using the same module keys the managed
+	// service gates plans on. Empty means every module, the historical
+	// default. Env-only (ENABLED_MODULES): it is an operator decision about
+	// the deployment, not a setting an admin should flip from the UI.
+	EnabledModules []string
 	// Rate limits (env -> DB -> default)
 	RateLimitWindowMs         int
 	RateLimitMax              int
@@ -281,9 +292,10 @@ func Load() (*Config, error) {
 		BillingInternalSecret: getEnv("BILLING_INTERNAL_SECRET", ""),
 		ProvisionerURL:        getEnv("PROVISIONER_URL", ""),
 
-		MaxLoginAttempts:   getEnvInt("MAX_LOGIN_ATTEMPTS", 5),
-		LockoutDurationMin: getEnvInt("LOCKOUT_DURATION_MINUTES", 15),
-		EnableHSTS:         getEnv("ENABLE_HSTS", "") == "true",
+		MaxLoginAttempts:      getEnvInt("MAX_LOGIN_ATTEMPTS", 5),
+		LockoutDurationMin:    getEnvInt("LOCKOUT_DURATION_MINUTES", 15),
+		EnableHSTS:            getEnv("ENABLE_HSTS", "") == "true",
+		ContentSecurityPolicy: resolveContentSecurityPolicy(getEnv("CONTENT_SECURITY_POLICY", "")),
 		// Default true: PatchMon's officially supported deployment is Docker
 		// behind a reverse proxy (Traefik, Caddy, nginx, NPM), where the proxy
 		// terminates TLS and sends X-Forwarded-Proto / X-Forwarded-For. With
@@ -297,6 +309,7 @@ func Load() (*Config, error) {
 		// Docker deployment); set it when proxies are chained, e.g. Cloudflare
 		// in front of Nginx Proxy Manager.
 		TrustedProxyRanges:          splitAndTrim(getEnv("TRUSTED_PROXY_RANGES", "")),
+		EnabledModules:              splitAndTrim(getEnv("ENABLED_MODULES", "")),
 		RateLimitWindowMs:           getEnvInt("RATE_LIMIT_WINDOW_MS", 900000),
 		RateLimitMax:                getEnvInt("RATE_LIMIT_MAX", 5000),
 		AuthRateLimitWindowMs:       getEnvInt("AUTH_RATE_LIMIT_WINDOW_MS", 600000),
@@ -383,6 +396,40 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// DefaultContentSecurityPolicy is what the embedded SPA needs and nothing
+// more: scripts and fonts from the origin only; inline styles because React
+// writes style attributes; images from the API, data: and blob: URLs (logo
+// upload previews) and any https: host (release-notes markdown); WebSockets
+// back to the origin; blob: workers for the Guacamole RDP client. No plugins,
+// no framing by other origins, no form posts elsewhere.
+const DefaultContentSecurityPolicy = "default-src 'self'; " +
+	"script-src 'self'; " +
+	"style-src 'self' 'unsafe-inline'; " +
+	"img-src 'self' data: blob: https:; " +
+	"font-src 'self' data:; " +
+	"connect-src 'self' wss: ws:; " +
+	"worker-src 'self' blob:; " +
+	"frame-ancestors 'self'; " +
+	"base-uri 'self'; " +
+	"form-action 'self'; " +
+	"object-src 'none'"
+
+// resolveContentSecurityPolicy maps the CONTENT_SECURITY_POLICY env value to
+// the header the server sends. Unset keeps the default; "off" (any case)
+// disables the header for operators who set their own policy at the proxy;
+// any other value is sent as written.
+func resolveContentSecurityPolicy(v string) string {
+	v = strings.TrimSpace(v)
+	switch {
+	case v == "":
+		return DefaultContentSecurityPolicy
+	case strings.EqualFold(v, "off"), strings.EqualFold(v, "false"), strings.EqualFold(v, "none"):
+		return ""
+	default:
+		return v
+	}
 }
 
 func getEnv(key, defaultVal string) string {

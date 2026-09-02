@@ -691,13 +691,21 @@ export const AuthProvider = ({ children }) => {
 	const hasModule = (moduleKey) => {
 		if (!moduleKey) return true;
 		const modules = tenant?.modules;
-		if (!modules) return true; // safety: empty/unknown -> treat as allowed
+		if (modules == null) return true; // safety: unknown -> treat as allowed
 		if (modules === "*") return true;
 		return modules
 			.split(",")
 			.map((m) => m.trim())
 			.includes(moduleKey);
 	};
+
+	// A module that is missing on a self-hosted install was switched off by the
+	// operator via ENABLED_MODULES. There is no plan to upgrade to, so the UI
+	// hides the surface outright instead of showing a tier badge or an
+	// upgrade screen. On a managed (multi-context) deployment a missing module
+	// still means "locked behind a higher plan" and stays discoverable.
+	const isModuleDisabled = (moduleKey) =>
+		!hasModule(moduleKey) && !tenant?.multi_context;
 
 	const SETUP_COMPLETE_CACHE_KEY = "patchmon_setup_complete";
 
@@ -901,6 +909,7 @@ export const AuthProvider = ({ children }) => {
 		// Multi-context module feature flags
 		tenant,
 		hasModule,
+		isModuleDisabled,
 		// Refetch tenant.modules (and host/slug) without a full refetchUser.
 		// Call this after any flow that can change the tenant's plan (billing
 		// tier change, admin-side package swap) so ModuleGate and the nav

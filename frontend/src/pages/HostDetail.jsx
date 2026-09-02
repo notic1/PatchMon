@@ -123,7 +123,7 @@ const HostDetail = () => {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const queryClient = useQueryClient();
 	const toast = useToast();
-	const { canManageHosts, hasModule } = useAuth();
+	const { canManageHosts, hasModule, isModuleDisabled } = useAuth();
 	const [showCredentialsModal, setShowCredentialsModal] = useState(false);
 
 	// Get plaintext API key from navigation state (only available immediately after host creation)
@@ -2576,37 +2576,41 @@ const HostDetail = () => {
 						)}
 						{/* Docker tab — only surfaced when the host has Docker installed.
 						    Tier-locked display (PLUS badge) kicks in if the tenant's
-						    plan doesn't include the docker module. */}
-						{integrationsData?.data?.integrations?.docker && (
+						    plan doesn't include the docker module. Hidden outright
+						    when a self-hosted operator disabled it via ENABLED_MODULES. */}
+						{integrationsData?.data?.integrations?.docker &&
+							!isModuleDisabled("docker") && (
+								<button
+									type="button"
+									onClick={() => handleTabChange("docker")}
+									className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
+										activeTab === "docker"
+											? "text-primary-600 dark:text-primary-400 border-b-2 border-primary-500"
+											: "text-secondary-500 dark:text-white hover:text-secondary-700 dark:hover:text-primary-400"
+									}`}
+								>
+									Docker
+									{!hasModule("docker") && (
+										<TierBadge tier={getRequiredTier("docker")} />
+									)}
+								</button>
+							)}
+						{!isModuleDisabled("patching") && (
 							<button
 								type="button"
-								onClick={() => handleTabChange("docker")}
+								onClick={() => handleTabChange("patching")}
 								className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
-									activeTab === "docker"
+									activeTab === "patching"
 										? "text-primary-600 dark:text-primary-400 border-b-2 border-primary-500"
 										: "text-secondary-500 dark:text-white hover:text-secondary-700 dark:hover:text-primary-400"
 								}`}
 							>
-								Docker
-								{!hasModule("docker") && (
-									<TierBadge tier={getRequiredTier("docker")} />
+								Patching
+								{!hasModule("patching") && (
+									<TierBadge tier={getRequiredTier("patching")} />
 								)}
 							</button>
 						)}
-						<button
-							type="button"
-							onClick={() => handleTabChange("patching")}
-							className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
-								activeTab === "patching"
-									? "text-primary-600 dark:text-primary-400 border-b-2 border-primary-500"
-									: "text-secondary-500 dark:text-white hover:text-secondary-700 dark:hover:text-primary-400"
-							}`}
-						>
-							Patching
-							{!hasModule("patching") && (
-								<TierBadge tier={getRequiredTier("patching")} />
-							)}
-						</button>
 						{/* Compliance tab — only surfaced when the host has OpenSCAP
 						    installed. MAX badge shown when module is absent. */}
 						{integrationsData?.data?.integrations?.compliance && (
@@ -2625,21 +2629,23 @@ const HostDetail = () => {
 								)}
 							</button>
 						)}
-						<button
-							type="button"
-							onClick={() => handleTabChange("terminal")}
-							className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
-								activeTab === "terminal"
-									? "text-primary-600 dark:text-primary-400 border-b-2 border-primary-500"
-									: "text-secondary-500 dark:text-white hover:text-secondary-700 dark:hover:text-primary-400"
-							}`}
-						>
-							Terminal
-							{!hasModule("ssh_terminal") && (
-								<TierBadge tier={getRequiredTier("ssh_terminal")} />
-							)}
-						</button>
-						{isWindowsHost && (
+						{!isModuleDisabled("ssh_terminal") && (
+							<button
+								type="button"
+								onClick={() => handleTabChange("terminal")}
+								className={`px-4 py-2 text-sm font-medium inline-flex items-center gap-2 ${
+									activeTab === "terminal"
+										? "text-primary-600 dark:text-primary-400 border-b-2 border-primary-500"
+										: "text-secondary-500 dark:text-white hover:text-secondary-700 dark:hover:text-primary-400"
+								}`}
+							>
+								Terminal
+								{!hasModule("ssh_terminal") && (
+									<TierBadge tier={getRequiredTier("ssh_terminal")} />
+								)}
+							</button>
+						)}
+						{isWindowsHost && !isModuleDisabled("rdp") && (
 							<button
 								type="button"
 								onClick={() => handleTabChange("rdp")}

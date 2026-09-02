@@ -656,14 +656,18 @@ func (h *UpdateAgentHandler) ProcessTask(ctx context.Context, t *asynq.Task) err
 type RunPatchHandler struct {
 	registry    *agentregistry.Registry
 	patchRuns   *store.PatchRunsStore
+	hosts       *store.HostsStore
+	db          database.DBProvider
 	poolCache   *hostctx.PoolCache
 	queueClient *asynq.Client
 	log         *slog.Logger
 }
 
-// NewRunPatchHandler creates a run_patch handler.
-func NewRunPatchHandler(registry *agentregistry.Registry, patchRuns *store.PatchRunsStore, poolCache *hostctx.PoolCache, queueClient *asynq.Client, log *slog.Logger) *RunPatchHandler {
-	return &RunPatchHandler{registry: registry, patchRuns: patchRuns, poolCache: poolCache, queueClient: queueClient, log: log}
+// NewRunPatchHandler creates a run_patch handler. hosts and db are used to
+// resolve Windows Update names to WUA GUIDs before dispatch; see
+// resolveWindowsUpdateNames.
+func NewRunPatchHandler(registry *agentregistry.Registry, patchRuns *store.PatchRunsStore, hosts *store.HostsStore, db database.DBProvider, poolCache *hostctx.PoolCache, queueClient *asynq.Client, log *slog.Logger) *RunPatchHandler {
+	return &RunPatchHandler{registry: registry, patchRuns: patchRuns, hosts: hosts, db: db, poolCache: poolCache, queueClient: queueClient, log: log}
 }
 
 // ProcessTask implements asynq.Handler.
@@ -726,11 +730,21 @@ func (h *RunPatchHandler) ProcessTask(ctx context.Context, t *asynq.Task) error 
 		"patch_type":   p.PatchType,
 		"dry_run":      p.DryRun,
 	}
+	// On Windows hosts the UI sends Windows Update titles, which the agent
+	// cannot install by; swap them for WUA GUIDs. A no-op for every other
+	// host and for WinGet package IDs.
+	var names []string
 	if p.PackageName != nil {
-		payload["package_name"] = *p.PackageName
+		names = append(names, *p.PackageName)
 	}
-	if len(p.PackageNames) > 0 {
-		payload["package_names"] = p.PackageNames
+	names = append(names, p.PackageNames...)
+	names = h.resolveWindowsUpdateNames(ctx, p, names)
+	if p.PackageName != nil {
+		payload["package_name"] = names[0]
+		names = names[1:]
+	}
+	if len(names) > 0 {
+		payload["package_names"] = names
 	}
 	msg, err := json.Marshal(payload)
 	if err != nil {
