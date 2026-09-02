@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -153,7 +154,7 @@ func keyPrefixForLog(key string) string {
 func HasModule(ctx stdctx.Context, module string) bool {
 	entry := EntryFromContext(ctx)
 	if entry == nil {
-		return true // single-context mode - no restrictions
+		return singleContextAllows(module)
 	}
 	if entry.Modules == nil {
 		return true // nil = all modules allowed
@@ -168,6 +169,97 @@ func HasModule(ctx stdctx.Context, module string) bool {
 		}
 	}
 	return false
+}
+
+// KnownModules lists every module key the server gates routes on with
+// RequireModule and the frontend gates surfaces on with hasModule. Keep the
+// two lists in step when adding a module: ENABLED_MODULES values are checked
+// against this list so a typo is logged instead of silently hiding nothing.
+var KnownModules = []string{
+	"ai",
+	"alerts_advanced",
+	"compliance",
+	"custom_branding",
+	"docker",
+	"patching",
+	"patching_policies",
+	"rbac_custom",
+	"rdp",
+	"ssh_terminal",
+}
+
+// singleContextModules is the module allow-list for single-context
+// (self-hosted) mode, set once at startup from ENABLED_MODULES. A nil pointer
+// means unrestricted, which is the historical behaviour and the default.
+//
+// Multi-context deployments never consult it: their allow-list comes from the
+// registry entry attached to each request.
+var singleContextModules atomic.Pointer[moduleSet]
+
+type moduleSet struct {
+	allowed map[string]struct{}
+	sorted  []string
+}
+
+// SetSingleContextModules restricts single-context mode to the given module
+// keys. Empty (or a lone "*") removes any restriction. Unknown keys are
+// dropped and returned so the caller can log them; they would otherwise be
+// dead entries that never enable anything. Safe to call concurrently with
+// HasModule, though in practice it runs once during router construction.
+func SetSingleContextModules(modules []string) (unknown []string) {
+	known := make(map[string]struct{}, len(KnownModules))
+	for _, m := range KnownModules {
+		known[m] = struct{}{}
+	}
+
+	set := &moduleSet{allowed: make(map[string]struct{})}
+	for _, raw := range modules {
+		m := strings.ToLower(strings.TrimSpace(raw))
+		if m == "" {
+			continue
+		}
+		if m == "*" {
+			singleContextModules.Store(nil)
+			return nil
+		}
+		if _, ok := known[m]; !ok {
+			unknown = append(unknown, m)
+			continue
+		}
+		if _, dup := set.allowed[m]; dup {
+			continue
+		}
+		set.allowed[m] = struct{}{}
+		set.sorted = append(set.sorted, m)
+	}
+
+	if len(set.allowed) == 0 && len(unknown) == 0 {
+		singleContextModules.Store(nil)
+		return nil
+	}
+	sort.Strings(set.sorted)
+	singleContextModules.Store(set)
+	return unknown
+}
+
+// SingleContextModulesString is what /me/context reports as "modules" in
+// single-context mode: "*" when unrestricted, otherwise the comma-separated
+// allow-list in the same shape a registry entry would carry.
+func SingleContextModulesString() string {
+	set := singleContextModules.Load()
+	if set == nil {
+		return "*"
+	}
+	return strings.Join(set.sorted, ",")
+}
+
+func singleContextAllows(module string) bool {
+	set := singleContextModules.Load()
+	if set == nil {
+		return true
+	}
+	_, ok := set.allowed[module]
+	return ok
 }
 
 // RequireModule returns middleware that checks if the context's package includes

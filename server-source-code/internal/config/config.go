@@ -107,6 +107,12 @@ type Config struct {
 	// PatchMon. Env-only: exposing this in the settings UI would let an admin
 	// widen it to 0.0.0.0/0 and restore X-Forwarded-For spoofing.
 	TrustedProxyRanges []string
+	// EnabledModules restricts which feature modules a self-hosted (single
+	// context) install exposes, using the same module keys the managed
+	// service gates plans on. Empty means every module, the historical
+	// default. Env-only (ENABLED_MODULES): it is an operator decision about
+	// the deployment, not a setting an admin should flip from the UI.
+	EnabledModules []string
 	// Rate limits (env -> DB -> default)
 	RateLimitWindowMs         int
 	RateLimitMax              int
@@ -303,6 +309,7 @@ func Load() (*Config, error) {
 		// Docker deployment); set it when proxies are chained, e.g. Cloudflare
 		// in front of Nginx Proxy Manager.
 		TrustedProxyRanges:          splitAndTrim(getEnv("TRUSTED_PROXY_RANGES", "")),
+		EnabledModules:              splitAndTrim(getEnv("ENABLED_MODULES", "")),
 		RateLimitWindowMs:           getEnvInt("RATE_LIMIT_WINDOW_MS", 900000),
 		RateLimitMax:                getEnvInt("RATE_LIMIT_MAX", 5000),
 		AuthRateLimitWindowMs:       getEnvInt("AUTH_RATE_LIMIT_WINDOW_MS", 600000),

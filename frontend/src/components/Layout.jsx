@@ -160,6 +160,7 @@ const Layout = ({ children }) => {
 		canManageSettings,
 		hasModule,
 		hasPermission,
+		tenant,
 	} = useAuth();
 	const { settings: publicSettings, isLoading: publicSettingsLoading } =
 		useSettings();
@@ -402,10 +403,29 @@ const Layout = ({ children }) => {
 				});
 			}
 
-			if (opsItems.length > 0) {
+			// On the managed service a locked item stays visible with a tier
+			// badge so it can be discovered and upgraded to. On a self-hosted
+			// install a locked item was switched off by the operator via
+			// ENABLED_MODULES, so it is removed from the nav altogether.
+			const visibleOpsItems = tenant?.multi_context
+				? opsItems
+				: opsItems
+						.filter((item) => !item.lockedModule)
+						.map((item) =>
+							item.children
+								? {
+										...item,
+										children: item.children.filter(
+											(child) => !child.lockedModule,
+										),
+									}
+								: item,
+						);
+
+			if (visibleOpsItems.length > 0) {
 				nav.push({
 					section: "OPERATIONS",
-					items: opsItems,
+					items: visibleOpsItems,
 				});
 			}
 		}

@@ -15,7 +15,7 @@ import TierBadge from "./TierBadge";
 // static constants + auth/settings context. This keeps the locked surfaces
 // free of any API calls that could leak information or trigger 403s.
 const UpgradeRequiredContent = ({ module: moduleKey, variant = "page" }) => {
-	const { hasPermission } = useAuth();
+	const { hasPermission, tenant } = useAuth();
 	const { settings: publicSettings } = useSettings();
 
 	const tierId = getRequiredTier(moduleKey);
@@ -25,6 +25,38 @@ const UpgradeRequiredContent = ({ module: moduleKey, variant = "page" }) => {
 
 	const canManageBilling =
 		publicSettings?.admin_mode === true && hasPermission("can_manage_billing");
+
+	// Self-hosted: the operator switched this module off (ENABLED_MODULES).
+	// Nothing to upgrade to, so say so plainly and skip the plan pitch.
+	if (!tenant?.multi_context) {
+		return (
+			<div
+				className={
+					variant === "inline"
+						? "py-8 px-4"
+						: variant === "modal"
+							? ""
+							: "max-w-3xl mx-auto py-12 px-4"
+				}
+			>
+				<div className="card p-6 text-center">
+					<div className="flex items-center justify-center mb-4">
+						<div className="rounded-full p-3 bg-secondary-100 dark:bg-secondary-800 text-secondary-500 dark:text-secondary-300">
+							<Lock className="h-6 w-6" />
+						</div>
+					</div>
+					<h2 className="text-lg font-semibold text-secondary-900 dark:text-white mb-2">
+						{featureName} is turned off on this server
+					</h2>
+					<p className="text-secondary-600 dark:text-secondary-300">
+						The administrator has not included this feature in{" "}
+						<code className="text-xs">ENABLED_MODULES</code>. Ask them to add{" "}
+						<code className="text-xs">{moduleKey}</code> if you need it.
+					</p>
+				</div>
+			</div>
+		);
+	}
 
 	if (!tierDef) {
 		return (
