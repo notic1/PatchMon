@@ -138,8 +138,8 @@ func Mux(opts MuxOpts) *asynq.ServeMux {
 	}
 	mux.Handle(TypeRunScan, wrap(TypeRunScan, NewRunScanHandler(registry, db, opts.PoolCache, complianceStore, opts.QueueClient, integrationStatusStore, log)))
 	mux.Handle(TypeInstallComplianceTools, wrap(TypeInstallComplianceTools, NewInstallComplianceToolsHandler(registry, db, opts.PoolCache, opts.RDB, opts.RedisCache, log)))
-	patchRunsStore := store.NewPatchRunsStore(&hostctx.DBResolver{Default: db})
-	mux.Handle(TypeRunPatch, wrap(TypeRunPatch, NewRunPatchHandler(registry, patchRunsStore, opts.PoolCache, opts.QueueClient, log)))
+	patchRunsStore := store.NewPatchRunsStore(dbResolver)
+	mux.Handle(TypeRunPatch, wrap(TypeRunPatch, NewRunPatchHandler(registry, patchRunsStore, store.NewHostsStore(dbResolver), dbResolver, opts.PoolCache, opts.QueueClient, log)))
 	mux.Handle(TypeMetricsSend, wrap(TypeMetricsSend, NewMetricsSendHandler(db, opts.PoolCache, opts.ServerVersion, log)))
 	return mux
 }
